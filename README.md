@@ -60,8 +60,8 @@ the audit trail. Then it's fenced and labelled as data.
 | | |
 |---|---|
 | Schema, RLS, grants | applied to Postgres 16 in CI, twice per run |
-| RLS and dispatch queue | 26 tests against a real database |
-| Prompt boundary, auth, domain logic | 39 unit tests |
+| RLS and dispatch queue | 29 tests against a real database |
+| Prompt boundary, auth, domain logic | 57 unit tests |
 | Server, API, UI, companion | 8 end to end tests against the built server |
 | Term gate | runs pre-commit and in CI |
 | Threads, search, attachments, editing | not built |
