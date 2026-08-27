@@ -28,21 +28,36 @@ const exec = promisify(execFile);
  *      or .bat without a shell (the CVE-2024-27980 fix). Naming the shim is
  *      not enough; it needs a shell.
  *
- * So Windows gets `shell: true`. That is safe HERE, and the reason is worth
- * keeping: the brief goes in on stdin, never as an argument. Every argument
- * below is a fixed flag this file writes. No room text, no user input, and no
- * dispatch field ever reaches a command line, so there is nothing for cmd's
- * quoting rules to mangle or for an attacker to break out of.
+ * So Windows goes through `cmd.exe /c`, which can run the shim. That is chosen
+ * over `shell: true` on purpose: shell mode concatenates the arguments instead
+ * of escaping them (Node warns about it, DEP0190), and here they are passed as
+ * a real argv with no shell parsing at any layer.
  *
- * If you ever move the prompt to argv, this becomes a command injection and
- * the shell has to go.
+ * Either way the brief goes in on stdin, never as an argument, so no room text
+ * ever reaches a command line.
  */
-export function claudeSpawn(): { bin: string; shell: boolean } {
-  const override = process.env.HANGAR_CLAUDE_BIN;
-  if (override) return { bin: override, shell: process.platform === "win32" };
+export function claudeSpawn(args: string[]): { bin: string; argv: string[] } {
+  const claude = process.env.HANGAR_CLAUDE_BIN ?? (process.platform === "win32" ? "claude.cmd" : "claude");
   return process.platform === "win32"
-    ? { bin: "claude.cmd", shell: true }
-    : { bin: "claude", shell: false };
+    ? { bin: process.env.COMSPEC ?? "cmd.exe", argv: ["/c", claude, ...args] }
+    : { bin: claude, argv: args };
+}
+
+/**
+ * Reject a request id that cannot safely become a path or a branch name.
+ *
+ * The companion takes this from whatever server it is pointed at and puts it
+ * into a directory path and a git branch. execFile means there is no shell to
+ * inject into, but `../../..` would still place a worktree outside the repo,
+ * and this process exists to run code. A server the companion trusts should
+ * still not be able to choose arbitrary paths on the machine.
+ */
+export function assertSafeCommandId(commandId: string): void {
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(commandId)) {
+    throw new Error(
+      `refusing a dispatch id that is not a plain token: ${JSON.stringify(commandId.slice(0, 80))}`
+    );
+  }
 }
 
 export interface RunOptions {
@@ -82,6 +97,7 @@ export interface RunResult {
  * finished should start from HEAD, not resume half of someone else's attempt.
  */
 export async function createWorktree(repoPath: string, commandId: string): Promise<{ dir: string; branch: string }> {
+  assertSafeCommandId(commandId);
   const branch = `hangar/${commandId}`;
   const dir = `${repoPath}/.hangar-worktrees/${commandId}`;
 
@@ -216,12 +232,15 @@ export async function runSession(opts: RunOptions): Promise<RunResult> {
   };
 
   try {
-    const { bin, shell } = claudeSpawn();
-    const child = spawn(
-      bin,
-      ["-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "bypassPermissions"],
-      { cwd: dir, stdio: ["pipe", "pipe", "pipe"], shell }
-    );
+    const { bin, argv } = claudeSpawn([
+      "-p",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "bypassPermissions",
+    ]);
+    const child = spawn(bin, argv, { cwd: dir, stdio: ["pipe", "pipe", "pipe"] });
 
     // Without this, a binary that cannot be spawned raises an unhandled 'error'
     // event and takes the whole companion down, so one bad dispatch ends every

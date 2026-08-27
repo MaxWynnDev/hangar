@@ -139,3 +139,22 @@ test("only the first interesting block of a message is emitted", () => {
   });
   assert.equal(ev.kind, "message");
 });
+
+// --- dispatch id validation ----------------------------------------------
+//
+// The companion takes this id from whatever server it points at and puts it in
+// a filesystem path and a git branch name.
+
+import { assertSafeCommandId } from "../dist-test/companion/src/session.js";
+
+test("ordinary dispatch ids pass", () => {
+  for (const id of ["disp_abc123", "d-1", "A.b_c-9"]) {
+    assert.doesNotThrow(() => assertSafeCommandId(id), id);
+  }
+});
+
+test("an id that would escape the worktree directory is refused", () => {
+  for (const id of ["../../../etc", "a/b", "a\b", "", "x".repeat(65), "a b", "a;rm -rf /", "a$(id)"]) {
+    assert.throws(() => assertSafeCommandId(id), /plain token/, JSON.stringify(id));
+  }
+});
