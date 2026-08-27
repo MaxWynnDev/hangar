@@ -1,0 +1,34 @@
+{
+  "name": "hangar",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Team chat where @claude is a real Claude Code session.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "check:leaks": "node scripts/check-no-leaks.mjs",
+    "test": "npm run build:test && node --test test/leak-gate.test.mjs test/dispatch-prompt.test.mjs test/lib.test.mjs test/auth.test.mjs test/session-events.test.mjs",
+    "verify": "npm run typecheck && npm test && npm run check:leaks && npm run check:leaks:history",
+    "check:leaks:history": "node scripts/check-no-leaks.mjs --history",
+    "prepare": "node scripts/install-hooks.mjs",
+    "db:apply": "node scripts/apply-schema.mjs",
+    "test:db": "node --test test/rls.test.mjs test/dispatch.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "build:test": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json --outDir dist",
+    "start": "node --env-file-if-exists=.env dist/src/server/index.js",
+    "companion": "node --env-file-if-exists=.env dist/companion/src/index.js",
+    "bootstrap": "node scripts/bootstrap.mjs",
+    "test:e2e": "npm run build && node --test test/e2e.test.mjs",
+    "db:check-upgrade": "node scripts/check-upgrade-path.mjs"
+  },
+  "dependencies": {
+    "postgres": "^3.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "typescript": "^7.0.2"
+  }
+}

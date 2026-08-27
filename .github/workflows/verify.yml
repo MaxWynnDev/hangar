@@ -1,0 +1,94 @@
+name: verify
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  terms:
+    name: term gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # history scan needs the whole history
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Proves each gate rule fires before trusting a clean scan, alongside the
+      # prompt boundary and the pure domain modules.
+      - name: Unit tests
+        run: npm test
+
+      # Runs against .provenance-terms.example.mjs, since the real list is
+      # gitignored. The scan prints which list it loaded.
+      - name: Scan tracked files
+        run: npm run check:leaks
+
+      # The tip being clean says nothing about what a clone can read. A leak
+      # that was committed and later deleted lives in history forever.
+      - name: Scan all history
+        run: npm run check:leaks:history
+
+  schema:
+    name: schema + row level security
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hangar_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/hangar_test
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Apply the schema
+        run: npm run db:apply
+
+      # Applying twice must be a no-op. The schema is declarative and has no
+      # migration journal, so re-runnability is the property that replaces one.
+      - name: Apply it again (idempotence)
+        run: npm run db:apply
+
+      # Drops a column a later version added, re-applies, and checks it came
+      # back. CI starts from an empty database, so nothing else here exercises
+      # the upgrade path an existing install takes.
+      - name: Upgrade path
+        run: npm run db:check-upgrade
+
+      # Connects as hangar_app, and refuses to run unless that role is actually
+      # subject to RLS. A suite run as superuser passes while proving nothing.
+      - name: Row level security and dispatch
+        run: npm run test:db
+
+      # Boots the built server and drives the whole flow: sign in, post,
+      # mention the agent, claim as the companion, stream console rows, post a
+      # reply, see it in the room. Everything else tests a layer; this tests
+      # the product.
+      - name: End to end
+        run: npm run test:e2e

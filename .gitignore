@@ -1,0 +1,9 @@
+# The real term list for the gate. The example is tracked; this never is.
+.provenance-terms.mjs
+*.log
+.env
+.env.local
+.next/
+dist-test/
+dist/
+node_modules/
