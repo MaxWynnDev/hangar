@@ -14,7 +14,7 @@
     "check:leaks:history": "node scripts/check-no-leaks.mjs --history",
     "prepare": "node scripts/install-hooks.mjs",
     "db:apply": "node scripts/apply-schema.mjs",
-    "test:db": "node --test test/rls.test.mjs test/dispatch.test.mjs",
+    "test:db": "node --test --test-concurrency=1 test/rls.test.mjs test/dispatch.test.mjs",
     "typecheck": "tsc --noEmit",
     "build:test": "tsc -p tsconfig.build.json",
     "build": "tsc -p tsconfig.build.json --outDir dist",

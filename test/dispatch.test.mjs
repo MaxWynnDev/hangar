@@ -33,6 +33,10 @@ async function asUser(userId, fn) {
 
 before(async () => {
   admin = postgres(ADMIN_URL, { max: 1, onnotice: () => {} });
+  // Serialised by --test-concurrency=1 in the test:db script. Two files running
+  // this at once produced "tuple concurrently updated" from Postgres, because
+  // both were altering the same role's catalog row. They also share every
+  // table, so parallel execution was never safe here.
   await admin.unsafe(`ALTER ROLE hangar_app WITH LOGIN PASSWORD '${APP_PASSWORD}'`);
   const u = new URL(ADMIN_URL);
   u.username = "hangar_app";
